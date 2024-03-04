@@ -7,7 +7,7 @@ CTimeLine.init = function(self, options)
 end
 
 CTimeLine.update_status = function(self)
-    return os.date("%Y-%m-%d", os.time())
+    return os.date(self.options.format or "%Y-%m-%d", os.time())
 end
 
 return CTimeLine
