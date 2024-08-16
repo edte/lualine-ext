@@ -1,4 +1,4 @@
-if try_require 'tmux-status' == nil then
+if require 'tmux-status' == nil then
   print 'tmux-status not found'
   return
 end
