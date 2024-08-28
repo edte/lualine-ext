@@ -1,68 +1,57 @@
 local CProjectName = require("lualine.component"):extend()
 
--- 获取tmux窗口名称
-local function getTmuxWindowName()
-	local res = "nil"
-	res = vim.fn.system({ "tmux", "display-message", "-p", "#W" })
-	if res == nil or res == "" then
-		return res
-	end
-	res = res:gsub("%c", "") -- 删除所有控制字符
-	if res == nil or res == "" then
-		return res
-	end
+local function getProjectName()
+  local res = vim.fn.system({ "tmux", "display-message", "-p", "#W" }):gsub("%c", "")
+  if res ~= "" and res ~= "failed to connect to server" and res ~= "reattach-to-user-namespace" then
+    -- print("tmux")
+    return res
+  end
 
-	if res == "failed to connect to server" then
-		res = ""
-	end
-	if res == "reattach-to-user-namespace" then
-		res = ""
-	end
+  if vim.fn.system([[git rev-parse --show-toplevel 2> /dev/null]]) == "" then
+    -- print("pwd")
+    return vim.fn.system("basename $(pwd)"):gsub("%c", "")
+  end
 
-	return res
+  res = vim.fn.system([[git config --local remote.origin.url|sed -n 's#.*/\([^.]*\)\.git#\1#p']]):gsub("%c", "")
+  if res ~= "" then
+    -- print("git remote")
+    return res
+  end
+
+  -- print("git local")
+  return vim.fn.system([[ TOP=$(git rev-parse --show-toplevel); echo ${TOP##*/} ]]):gsub("%c", "")
 end
 
-function IsGitProject()
-	return vim.fn.system([[git rev-parse --show-toplevel 2> /dev/null]]) ~= ""
-end
-
--- 获取git远程仓库名称
-local function getGitRemoteProjectName()
-	return vim.fn.system([[git config --local remote.origin.url|sed -n 's#.*/\([^.]*\)\.git#\1#p']])
-end
-
--- 获取git本地仓库名称
-local function getGitLocalProjectName()
-	return vim.fn.system([[ TOP=$(git rev-parse --show-toplevel); echo ${TOP##*/} ]])
-end
+-- TOOD: 这里会多次调用，应该缓存一下, 看用vimenter咋优化
+-- 从test进入neovim再切回来，cwd/pwd不会变，还是config的路径，待修复
+local default_options = {
+  project_name = getProjectName(),
+}
 
 CProjectName.init = function(self, options)
-	CProjectName.super.init(self, options)
+  CProjectName.super.init(self, options)
+  self.options = vim.tbl_deep_extend("keep", self.options or {}, default_options)
+
+  local group_id = vim.api.nvim_create_augroup("get_project_name", { clear = true })
+  local au = vim.api.nvim_create_autocmd
+
+  au({ "BufEnter" }, {
+    group = group_id,
+    pattern = "*",
+    callback = function()
+      if vim.bo.filetype == "minifiles" or vim.bo.filetype == "alpha" then
+        return
+      end
+
+      self.options.project_name = getProjectName()
+      -- print("read: " .. self.options.project_name)
+    end,
+  })
 end
 
 CProjectName.update_status = function(self)
-	local res = getTmuxWindowName()
-	res = res:gsub("%c", "") -- 删除所有控制字符
-	if res ~= "" then
-		return res
-	end
-
-	if IsGitProject() == false then
-		res = vim.fn.system("basename $(pwd)")
-		res = res:gsub("%c", "") -- 删除所有控制字符
-		return res
-	end
-
-	res = getGitRemoteProjectName()
-	res = res:gsub("%c", "") -- 删除所有控制字符
-	if res ~= "" then
-		return res
-	end
-
-	res = getGitLocalProjectName()
-	res = res:gsub("%c", "") -- 删除所有控制字符
-
-	return res
+  -- print("status")
+  return self.options.project_name
 end
 
 return CProjectName
